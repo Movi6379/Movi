@@ -23,11 +23,11 @@ def load_etap_data():
 df = load_etap_data()
 
 # --- HEADER ---
-st.title("⚡ Smart Grid Fault Detection & Rectification")
+st.title(" Smart Grid Fault Detection & Rectification")
 st.markdown("---")
 
 # --- ALERT PANEL ---
-st.sidebar.header("⚠️ Real-time Alerts")
+st.sidebar.header("Real-time Alerts")
 for _, row in df.iterrows():
     if row['Severity'] == 'Critical':
         st.sidebar.error(f"**Critical Fault at {row['Bus_ID']}**\n\nType: {row['Fault_Type']} | Current: {row['Fault_Current_kA']} kA")
@@ -71,7 +71,7 @@ r1, r2 = st.columns(2)
 with r1:
     st.info(f"**Fault Type:** {f_type}")
     for item in recs.get(f_type, ["General Inspection Required"]):
-        st.write(f"✅ {item}")
+        st.write(f" {item}")
 
 with r2:
     st.success("### Reliability Impact\nImplementing these actions restores **System Stability** by preventing cascading failures and improves **SAIDI/SAIFI** indices.")
