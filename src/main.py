@@ -1,55 +1,85 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
+
+# --- PAGE CONFIG ---
 st.set_page_config(page_title="Smart Grid Fault Dashboard", layout="wide")
-def load_etap_data():
-    # Replace with your actual ETAP export path: pd.read_csv('data/your_file.csv')
+
+# --- MOCK DATA GENERATOR (Replace with your ETAP CSV/Excel import) ---
+def get_mock_data():
     data = {
-        'Bus_ID': ['Bus-1', 'Bus-2', 'Bus-3', 'Bus-4', 'Bus-5'],
-        'Fault_Type': ['LLL', 'LG', 'LL', 'LLG', 'LLL'],
-        'Fault_Current_kA': [25.4, 8.2, 12.5, 15.1, 32.8],
-        'Fault_Power_MVA': [450, 120, 210, 240, 580],
-        'Voltage_Dip_pu': [0.2, 0.85, 0.6, 0.55, 0.1], # 1.0 is healthy
-        'Severity': ['Critical', 'Low', 'Medium', 'Medium', 'Critical']
+        'Bus_ID': ['Bus 01', 'Bus 05', 'Bus 12', 'Bus 18'],
+        'Fault_Type': ['LLL', 'LG', 'LLG', 'LL'],
+        'Voltage_Dip_pu': [0.2, 0.85, 0.45, 0.6],
+        'Current_kA': [45.2, 12.5, 28.1, 19.8],
+        'Location_km': [1.2, 5.8, 12.4, 18.2]
     }
-    return pd.DataFrame(data)
-df = load_etap_data()
-st.title(" Smart Grid Fault Detection & Rectification")
-st.markdown("---")
-st.sidebar.header("Real-time Alerts")
-for _, row in df.iterrows():
-    if row['Severity'] == 'Critical':
-        st.sidebar.error(f"**Critical Fault at {row['Bus_ID']}**\n\nType: {row['Fault_Type']} | Current: {row['Fault_Current_kA']} kA")
+    df = pd.DataFrame(data)
+    
+    # Severity Logic
+    conditions = [
+        (df['Voltage_Dip_pu'] < 0.3),
+        (df['Voltage_Dip_pu'] >= 0.3) & (df['Voltage_Dip_pu'] < 0.7),
+        (df['Voltage_Dip_pu'] >= 0.7)
+    ]
+    values = ['Critical', 'Medium', 'Low']
+    df['Severity'] = np.select(conditions, values)
+    return df
+
+df = get_mock_data()
+
+# --- SIDEBAR ---
+st.sidebar.header("⚡ Grid Control Center")
+selected_bus = st.sidebar.selectbox("Select Fault Location", df['Bus_ID'])
+fault_info = df[df['Bus_ID'] == selected_bus].iloc[0]
+
+# --- HEADER ---
+st.title("🛡️ Smart Grid Fault Detection & Analysis")
+st.markdown(f"**Real-time Status:** Monitoring ETAP Short Circuit Analysis")
+st.divider()
+
+# --- METRICS SECTION ---
 col1, col2, col3, col4 = st.columns(4)
-col1.metric("Highest Fault Current", f"{df['Fault_Current_kA'].max()} kA")
-col2.metric("Max Fault Power", f"{df['Fault_Power_MVA'].max()} MVA")
-col3.metric("Critical Buses", len(df[df['Severity'] == 'Critical']))
-col4.metric("Avg Voltage Dip", f"{df['Voltage_Dip_pu'].mean()} pu")
-st.markdown("### Grid Analysis Visuals")
-c1, c2 = st.columns(2)
-with c1:
-    fig_v = px.bar(df, x='Bus_ID', y='Voltage_Dip_pu', color='Severity',
-                   title="Voltage Profile during Fault (pu)", color_discrete_map={'Critical':'red', 'Medium':'orange', 'Low':'green'})
-    st.plotly_chart(fig_v, use_container_width=True)
-with c2:
-    fig_i = px.line(df, x='Bus_ID', y='Fault_Current_kA', markers=True, title="Fault Current Distribution (kA)")
-    st.plotly_chart(fig_i, use_container_width=True)
-st.markdown("---")
-st.subheader("🛠️ Rectification & Protection Actions")
-selected_bus = st.selectbox("Select a Bus to view Rectification Plan", df['Bus_ID'])
-bus_info = df[df['Bus_ID'] == selected_bus].iloc[0]
-f_type = bus_info['Fault_Type']
-recs = {
-    'LLL': ["Immediate Isolation via Circuit Breaker", "Check for busbar short-circuits", "Verify Relay Coordination (ANSI 50/51)"],
-    'LG': ["Check Neutral Grounding Resistor (NGR)", "Inspect insulator health", "Verify Ground Fault Relay (ANSI 51N)"],
-    'LL': ["Verify phase-to-phase clearances", "Adjust Time-Overcurrent settings"],
-    'LLG': ["Check surge arresters", "Perform load shedding to stabilize voltage"]
-}
-r1, r2 = st.columns(2)
-with r1:
-    st.info(f"**Fault Type:** {f_type}")
-    for item in recs.get(f_type, ["General Inspection Required"]):
-        st.write(f" {item}")
-with r2:
-    st.success("### Reliability Impact\nImplementing these actions restores **System Stability** by preventing cascading failures and improves **SAIDI/SAIFI** indices.")
+col1.metric("Fault Type", fault_info['Fault_Type'])
+col2.metric("Current (kA)", f"{fault_info['Current_kA']} kA", delta="High Load", delta_color="inverse")
+col3.metric("Voltage (pu)", f"{fault_info['Voltage_Dip_pu']} pu")
+
+# Color coding for severity
+sev_color = {"Critical": "red", "Medium": "orange", "Low": "green"}
+col4.markdown(f"**Severity** \n# :{sev_color[fault_info['Severity']]}[{fault_info['Severity']}]")
+
+# --- VISUALIZATIONS ---
+st.subheader("📊 Analytical Profiles")
+tab1, tab2 = st.tabs(["Voltage Dip Profile", "Current Magnitude"])
+
+with tab1:
+    fig_volt = px.line(df, x='Location_km', y='Voltage_Dip_pu', markers=True, 
+                       title="Voltage Profile Across Grid Distance",
+                       labels={'Voltage_Dip_pu': 'Voltage (p.u.)', 'Location_km': 'Distance (km)'})
+    fig_volt.add_hline(y=0.3, line_dash="dash", line_color="red", annotation_text="Critical Threshold")
+    st.plotly_chart(fig_volt, use_container_width=True)
+
+with tab2:
+    fig_curr = px.bar(df, x='Bus_ID', y='Current_kA', color='Severity',
+                      color_discrete_map=sev_color, title="Fault Current per Bus")
+    st.plotly_chart(fig_curr, use_container_width=True)
+
+# --- RECTIFICATION SECTION ---
+st.divider()
+st.subheader("🛠️ Engineering Rectification Recommendations")
+
+with st.expander("View Automated Action Plan", expanded=True):
+    if fault_info['Severity'] == 'Critical':
+        st.error("🚨 **Immediate Action Required:**")
+        st.write("* Isolation of Bus via Circuit Breaker Trip.")
+        st.write("* Check for Three-Phase Symmetrical Fault at Transformer Primary.")
+        st.write("* Divert load to redundant Substation B.")
+    elif fault_info['Severity'] == 'Medium':
+        st.warning("⚠️ **Preventative Maintenance:**")
+        st.write("* Inspect line insulators at the specified distance.")
+        st.write("* Adjust Relay Coordination settings on Bus Relay.")
+    else:
+        st.success("✅ **Status Stable:**")
+        st.write("Transient fault detected. Monitor harmonics for 24 hours.")
